@@ -1,32 +1,36 @@
-"""Scripted teacher: decides which of the 4 modes to use and how to steer.
+"""Scripted teacher v2: creates training labels only. NOT part of the submitted bot.
 
-Only used to create training labels. It is NOT part of the submitted bot.
-The teacher may use information the student does not see (e.g. on_ground).
-
-Modes: 0 Neutral, 1 Chase, 2 Jump, 3 Front dodge.
-Steering: -1 (left) to +1 (right).
+Modes: 0 Neutral, 1 Chase, 2 Jump, 3 Front dodge. Steering is only used in Chase.
+Inputs it uses: ball_rel / pred_rel (car-relative UU, same data the student sees),
+speed, plus on_ground (NOT a student input; the student must infer it).
+All thresholds live in Config so they can be tuned from live observation.
 """
 import math
+from dataclasses import dataclass
 
 NEUTRAL, CHASE, JUMP, DODGE = 0, 1, 2, 3
 
-# ---- Tunable constants (starting guesses, to be adjusted from observation) ----
-STEER_GAIN = 5.0          # same style as the RLBot example bot
-FAR_DIST = 1500.0         # beyond this, aim at the 2-second ball prediction
-FAR_FLIP_DIST = 1800.0    # only do a speed flip if the ball is at least this far
-FLIP_MIN_SPEED = 500.0    # below this, keep accelerating first
-FLIP_MAX_SPEED = 1300.0   # above this, a flip is not worth the time
-ALIGN_ANGLE = 0.25        # radians; must be facing the target to flip
-CLOSE_FWD_MIN = 150.0     # close flip window: ball this far ahead...
-CLOSE_FWD_MAX = 450.0
-CLOSE_SIDE_MAX = 130.0    # ...and roughly in line
-CLOSE_UP_MAX = 200.0      # ...and low enough to hit
-CLOSE_MIN_SPEED = 300.0
-# Flip timeline in seconds since the flip started
-JUMP_END = 0.08
-GAP_END = 0.13
-DODGE_END = 0.23
-RECOVER_END = 1.2
+
+@dataclass
+class Config:
+    steer_gain: float = 5.0        # same as the RLBot example bot
+    far_dist: float = 1500.0       # beyond this aim at the 2 s prediction (example bot rule)
+    reach_up: float = 300.0        # ball higher than this (rel. to car) is out of ground-jump reach:
+                                   # aim at the prediction instead of driving underneath it
+    hit_up_min: float = 150.0      # ball between hit_up_min and reach_up -> jump to it
+    hit_lead: float = 0.45         # start the jump when time-to-contact (fwd/speed) <= this (s)
+    hit_min_lead: float = 0.15     # ...but not when already almost there (s)
+    hit_side: float = 120.0        # max sideways offset (UU) for a jump hit
+    hit_min_speed: float = 300.0
+    jump_hold_hit: float = 0.20    # hold jump longer for height (s)
+    flip_min_speed: float = 600.0  # speed-flip window: below, accelerating is cheaper
+    flip_max_speed: float = 1300.0 # above, near top throttle speed (~1410)
+    flip_min_dist: float = 2000.0  # only flip for speed when the ball is far
+    align_angle: float = 0.15      # rad; must face the target to speed-flip
+    flip_jump: float = 0.05        # reference example timings: jump, release, dodge
+    flip_gap: float = 0.05
+    flip_dodge: float = 0.20
+    cooldown: float = 2.0          # min seconds between sequence starts (stops flip spam)
 
 
 def _clamp(x, lo=-1.0, hi=1.0):
@@ -34,56 +38,57 @@ def _clamp(x, lo=-1.0, hi=1.0):
 
 
 class Teacher:
-    """Create one Teacher per match. It remembers when a flip started."""
+    """One Teacher per bot. Remembers the running jump/flip sequence."""
 
-    def __init__(self):
-        self.flip_start = None
+    def __init__(self, config=None):
+        self.cfg = config or Config()
+        self.seq = None            # (start_time, [(duration, mode), ...])
+        self.last_start = -1e9
+        self.last_now = None
 
     def decide(self, s, now):
-        """s: dict with ball_present, ball_rel (fwd,right,up in UU),
-        pred_rel (same or None), speed (UU/s), on_ground (bool).
-        now: match time in seconds. Returns (mode, steer)."""
-        if self.flip_start is not None:
-            return self._flip_step(s, now)
+        """s: ball_present, ball_rel, pred_rel, speed, on_ground. Returns (mode, steer)."""
+        c = self.cfg
+        if self.last_now is not None and now < self.last_now:   # clock restarted (new match)
+            self.seq, self.last_start = None, -1e9
+        self.last_now = now
         if not s["ball_present"]:
+            self.seq = None
             return NEUTRAL, 0.0
 
-        ball = s["ball_rel"]
-        dist = math.sqrt(sum(v * v for v in ball))
-        target = ball
+        fwd, right, up = s["ball_rel"]
+        dist = math.sqrt(fwd * fwd + right * right + up * up)
         pred = s.get("pred_rel")
-        if dist > FAR_DIST and pred is not None:
-            target = pred
+        use_pred = pred is not None and (dist > c.far_dist or up > c.reach_up)
+        tx, ty = (pred[0], pred[1]) if use_pred else (fwd, right)
+        angle = math.atan2(ty, tx)
+        steer = _clamp(angle * c.steer_gain)
 
-        angle = math.atan2(target[1], target[0])
-        steer = _clamp(angle * STEER_GAIN)
+        if self.seq is not None:
+            start, phases = self.seq
+            t = now - start
+            for duration, mode in phases:
+                if t < duration:
+                    return mode, (steer if mode == CHASE else 0.0)
+                t -= duration
+            self.seq = None                                   # finished: back to normal driving
 
-        if s["on_ground"] and self._want_flip(s, ball, dist, angle):
-            self.flip_start = now
-            return JUMP, 0.0
+        if s["on_ground"] and now - self.last_start >= c.cooldown:
+            phases = self._pick(s, fwd, right, up, dist, angle)
+            if phases:
+                self.seq, self.last_start = (now, phases), now
+                mode = phases[0][1]
+                return mode, 0.0
         return CHASE, steer
 
-    def _want_flip(self, s, ball, dist, angle):
-        speed = s["speed"]
-        fwd, right, up = ball
-        far_flip = (dist > FAR_FLIP_DIST
-                    and FLIP_MIN_SPEED <= speed <= FLIP_MAX_SPEED
-                    and abs(angle) < ALIGN_ANGLE)
-        close_flip = (CLOSE_FWD_MIN < fwd < CLOSE_FWD_MAX
-                      and abs(right) < CLOSE_SIDE_MAX
-                      and up < CLOSE_UP_MAX
-                      and speed >= CLOSE_MIN_SPEED)
-        return far_flip or close_flip
-
-    def _flip_step(self, s, now):
-        t = now - self.flip_start
-        if t < JUMP_END:
-            return JUMP, 0.0
-        if t < GAP_END:
-            return NEUTRAL, 0.0
-        if t < DODGE_END:
-            return DODGE, 0.0
-        if t < RECOVER_END:
-            return NEUTRAL, 0.0
-        self.flip_start = None
-        return self.decide(s, now)
+    def _pick(self, s, fwd, right, up, dist, angle):
+        c, speed = self.cfg, s["speed"]
+        if c.hit_up_min <= up <= c.reach_up and fwd > 0 and abs(right) <= c.hit_side \
+                and speed >= c.hit_min_speed:
+            tc = fwd / speed
+            if c.hit_min_lead <= tc <= c.hit_lead:
+                return [(c.jump_hold_hit, JUMP)]
+        if up < c.hit_up_min and dist > c.flip_min_dist and abs(angle) < c.align_angle \
+                and c.flip_min_speed <= speed <= c.flip_max_speed:
+            return [(c.flip_jump, JUMP), (c.flip_gap, CHASE), (c.flip_dodge, DODGE)]
+        return None
