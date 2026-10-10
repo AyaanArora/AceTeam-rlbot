@@ -1,0 +1,14 @@
+#:schema https://rlbot.org/schemas/agent.json
+[settings]
+name = "AceTeam Teacher"
+agent_id = "aceteam/teacher"
+root_dir = ""
+run_command = "..\\.venv\\Scripts\\python.exe -u -B bot.py"
+loadout_file = "../loadout.toml"
+logo_file = ""
+
+[details]
+description = "Scripted teacher used to generate training data. NOT the ML student."
+developer = "AceTeam"
+language = "Python"
+tags = ["1v1"]
