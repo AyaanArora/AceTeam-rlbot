@@ -3,7 +3,283 @@
   "name": "IKKA",
   "agent_id": "aceteam/ikka",
   "baseline_checkpoint_sha256": "579fa26010140514d2e9b7f0e2871bee569c594b7da8648e31ee1489007cd5b7",
-  "checkpoint_source": "Unchanged starter weights; no training performed by this tool",
-  "training_provenance": null,
-  "live_acceptance": "NOT TESTED for this submission"
+  "checkpoint_source": "Participant checkpoint",
+  "training_provenance": {
+    "dataset_version": "aceteam_teacher_v2_recordings",
+    "dataset_manifest": [
+      {
+        "file": "20261011_043847_956(1).csv",
+        "sha256": "2c1cec431840514e90cd49789a07412bb057784508b7e722fde2bc7d6673a64b",
+        "rows": 14745
+      }
+    ],
+    "objective": "Frequency-weighted mode cross entropy, complete teacher flip windows weighted 8x and their release rows a further 3x; plus 2 * Chase-only steering MSE",
+    "architecture": "Official Policy: 13-64-ReLU-GRU64-5; 26181 parameters",
+    "original_policy_sha256": "e6508a0ab29be40be51a6e1859bfb6d63a1072e9c87c1ddbdde0cbf78e4df810",
+    "seed": 42,
+    "split_method": {
+      "method": "single_match_chronological_75_25_with_5_second_gap",
+      "train_end_exclusive": 10820,
+      "validation_start": 11058,
+      "validation_time": 263.850006,
+      "gap_rows": 238,
+      "independent_match_validation": false,
+      "limitation": "Same-match validation used for model selection; no independent test match."
+    },
+    "optimizer": "AdamW",
+    "learning_rate": 0.0003,
+    "weight_decay": 1e-05,
+    "gradient_clip": 1.0,
+    "class_counts": [
+      1641,
+      8876,
+      238,
+      65
+    ],
+    "class_weights": [
+      1.6942812204360962,
+      0.728502631187439,
+      4.448885917663574,
+      7.91785192489624
+    ],
+    "sequence_length": 128,
+    "hidden_state": "Carry and detach across chunks; reset at start of each original/mirrored match stream.",
+    "augmentation": "Paired original and mirrored full streams per optimizer step: flip o1/o4 and steering; separate hidden states",
+    "initialization": {
+      "file": "training_parent.pt",
+      "sha256": "48d249412777581c1ba10eece1451e7af8dc0766ac444105e53094dfe6a6303f",
+      "provenance_file": "parent_training_provenance.json"
+    },
+    "epochs_completed": 23,
+    "selected_epoch": 23,
+    "checkpoint_selection": "Select low validation MAE + 0.3*(1-macro F1) + 0.5*false-jump rate; additionally inspect full Jump/release/Dodge order. Snapshot epoch chosen after that inspection. Validation is reused for tuning.",
+    "baseline_validation": {
+      "rows": 3687,
+      "mode_accuracy": 0.9528071880340576,
+      "steering_mae": 0.277059406042099,
+      "steering_rmse": 0.5058515667915344,
+      "macro_f1": 0.6648668694632376,
+      "false_jump_frame_rate": 0.0,
+      "per_mode": [
+        {
+          "mode": 0,
+          "support": 735,
+          "predicted": 829,
+          "precision": 0.8866103739445115,
+          "recall": 1.0,
+          "f1": 0.9398976982097187
+        },
+        {
+          "mode": 1,
+          "support": 2866,
+          "predicted": 2852,
+          "precision": 0.9719495091164095,
+          "recall": 0.9672016748080949,
+          "f1": 0.969569779643232
+        },
+        {
+          "mode": 2,
+          "support": 76,
+          "predicted": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "mode": 3,
+          "support": 10,
+          "predicted": 6,
+          "precision": 1.0,
+          "recall": 0.6,
+          "f1": 0.7499999999999999
+        }
+      ],
+      "confusion": [
+        [
+          735,
+          0,
+          0,
+          0
+        ],
+        [
+          94,
+          2772,
+          0,
+          0
+        ],
+        [
+          0,
+          76,
+          0,
+          0
+        ],
+        [
+          0,
+          4,
+          0,
+          6
+        ]
+      ],
+      "predicted_jump_starts": 1,
+      "selection_score": 0.3775993452031277
+    },
+    "validation_results": {
+      "rows": 3687,
+      "mode_accuracy": 0.9717927575111389,
+      "steering_mae": 0.2109321802854538,
+      "steering_rmse": 0.4169648587703705,
+      "macro_f1": 0.7881182950379467,
+      "false_jump_frame_rate": 0.012476268224418163,
+      "per_mode": [
+        {
+          "mode": 0,
+          "support": 735,
+          "predicted": 735,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        {
+          "mode": 1,
+          "support": 2866,
+          "predicted": 2878,
+          "precision": 0.9798471160528145,
+          "recall": 0.9839497557571528,
+          "f1": 0.9818941504178273
+        },
+        {
+          "mode": 2,
+          "support": 76,
+          "predicted": 66,
+          "precision": 0.30303030303030304,
+          "recall": 0.2631578947368421,
+          "f1": 0.28169014084507044
+        },
+        {
+          "mode": 3,
+          "support": 10,
+          "predicted": 8,
+          "precision": 1.0,
+          "recall": 0.8,
+          "f1": 0.888888888888889
+        }
+      ],
+      "confusion": [
+        [
+          735,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          2820,
+          46,
+          0
+        ],
+        [
+          0,
+          56,
+          20,
+          0
+        ],
+        [
+          0,
+          2,
+          0,
+          8
+        ]
+      ],
+      "predicted_jump_starts": 11,
+      "selection_score": 0.28073482588627885
+    },
+    "training_seconds": 51.21773437799857,
+    "torch_version": "2.11.0+cpu",
+    "training_command": ".venv/Scripts/python.exe aceteam_upgrade/fast_train.py --repo . --csv datasets/teacher_v2/20261011_043847_956.csv --output runs/reproduce_candidate --initial aceteam_upgrade/training_parent.pt --epochs 23 --lr 0.0003 --release-weight 3 --flip-weight 8 --patience 60 --seed 42",
+    "checkpoint_sha256": "7da1cbb814f2a8df7c30a26c32c12179f6945286da7be030571ad75add78e4f4",
+    "teacher_privileged_information": "Teacher uses on_ground to initiate sequences; student has only official 13 inputs.",
+    "offline_checks": {
+      "checkpoint_reload": true,
+      "sequential_vs_callback_inference": true,
+      "parameter_count": 26181,
+      "baseline_cosine_similarity": 0.8212782144546509,
+      "official_preflight_passed": true,
+      "official_submission_validator_passed": true,
+      "installer_rollback_fault_test_passed": true,
+      "checks_platform": "Linux CPU; live game and Windows execution not tested here"
+    },
+    "live_gameplay": "NOT TESTED",
+    "limitations": [
+      "Same-match validation used for model selection; no independent test match.",
+      "Imitation metrics do not establish win rate or playing improvement.",
+      "Only recorded teacher states; student-generated states can differ. Sparse Dodge examples.",
+      "Only one teacher speed-flip event in validation. Jump precision remains low; live flip success and match strength are unverified."
+    ],
+    "release_phase_weight": 3.0,
+    "complete_flip_window_weight": 8.0,
+    "official_repository_revision": "5d8801361766cae4584245e9188edc64fd1d79c3",
+    "offline_flip_validation": {
+      "teacher_flip_windows": 1,
+      "windows_with_jump_release_dodge_order": 1,
+      "events": [
+        {
+          "time": 311.216675,
+          "jump_start": 13146,
+          "dodge_start": 13151,
+          "dodge_end": 13160,
+          "teacher_modes": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2,
+            2,
+            2,
+            1,
+            1,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3
+          ],
+          "student_modes": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2,
+            2,
+            2,
+            2,
+            1,
+            1,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            1
+          ],
+          "release_present": true,
+          "jump_release_dodge_order_present": true
+        }
+      ],
+      "limitation": "Teacher-state playback; does not prove student-generated physics or successful live flips."
+    }
+  },
+  "live_acceptance": "NOT TESTED after edits; run preflight and GUI match",
+  "checkpoint_sha256": "7da1cbb814f2a8df7c30a26c32c12179f6945286da7be030571ad75add78e4f4"
 }
